@@ -1,0 +1,3 @@
+./qnt_imgs/img1.jpg ./qnt_imgs/img1.jpg ./qnt_imgs/img1.jpg ./qnt_imgs/img1.jpg ./qnt_imgs/img1.jpg ./qnt_imgs/img1.jpg ./qnt_imgs/img3.jpg ./qnt_imgs/img3.jpg
+./qnt_imgs/img2.jpg ./qnt_imgs/img2.jpg ./qnt_imgs/img2.jpg ./qnt_imgs/img2.jpg ./qnt_imgs/img2.jpg ./qnt_imgs/img2.jpg ./qnt_imgs/img3.jpg ./qnt_imgs/img3.jpg
+./qnt_imgs/img3.jpg ./qnt_imgs/img3.jpg ./qnt_imgs/img3.jpg ./qnt_imgs/img3.jpg ./qnt_imgs/img3.jpg ./qnt_imgs/img3.jpg ./qnt_imgs/img3.jpg ./qnt_imgs/img3.jpg
