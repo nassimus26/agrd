@@ -34,7 +34,7 @@ utils = tf.keras.utils
 callbacks = tf.keras.callbacks
 plot_model = tf.keras.utils.plot_model
 
-def cutSave(main_dir, mod):
+def loadDS(main_dir, mod):
     i = 0
     fights_train_dest = main_dir+'_'+mod+'_fights_train'+'.npy'
     labels_train_dest = main_dir+'_'+mod+'_labels_train'+'.npy'
@@ -63,18 +63,6 @@ def cutSave(main_dir, mod):
                                 labels_train[i]=1
                             else:
                                 labels_train[i]=0
-                        elif mod =='test':
-                            fights_test[i][:][:] = videos
-                            if x =='fight':
-                                labels_test[i]=1
-                            else:
-                                labels_test[i]=0
-                        elif mod =='val':
-                            fights_val[i][:][:] = videos
-                            if x =='fight':
-                                labels_vals[i]=1
-                            else:
-                                labels_vals[i]=0
                         i +=1
                         if ((i==dataset_size/2) & (x == 'fight')) or i==dataset_size:
                             break
@@ -84,16 +72,15 @@ def cutSave(main_dir, mod):
                 print('saving train arrays')
 #                save(mod+'_fights_train'+'.npy', fights_train)
 #                save(mod+'_labels_train'+'.npy', labels_train)
-
 nbr_frame = 6
-img_width = 224
-img_height = 224
+img_width = 420
+img_height = 300
 img_size = (img_height, img_width)
 input_shape = img_size + (3,)
 full_input_shape = (nbr_frame,) + input_shape
 print(full_input_shape)
 
-dataset_size = 100
+dataset_size = 40
 fights_train = np.zeros((dataset_size,) + full_input_shape, dtype=np.float32)
 fights_val = fights_train
 labels_train = np.empty(dataset_size, dtype=np.int_)
@@ -133,32 +120,8 @@ def capture(filename):
         k = k+1
  #  print(resf)
     return resf
-cutSave('./trainm/',"train")
+loadDS('./trainm/',"train")
 
-#cut_save('./testm/',"test")
-#plt.imshow(fights_test[19][5])
-#plt.show()
-
-class AccuracyHistory(callbacks.Callback):
-    def on_train_begin(self, logs={}):
-        self.acc = []
-        self.val_acc = []
-        self.loss = []
-        self.val_loss = []
-
-    def on_epoch_end(self, batch, logs={}):
-        self.acc.append(logs.get('acc'))
-        self.val_acc.append(logs.get('val_acc'))
-        self.loss.append(logs.get('loss'))
-        self.val_loss.append(logs.get('val_loss'))
-
-history = AccuracyHistory()
-earlyStopping = callbacks.EarlyStopping(monitor='val_loss', patience=8,min_delta=1e-5, verbose=0, mode='min')
-mcp_save = callbacks.ModelCheckpoint('fights.keras', save_best_only=True, monitor='val_loss', mode='min')
-reduce_lr_loss = callbacks.ReduceLROnPlateau(monitor='val_loss',patience=10, verbose=2, factor=0.5,min_lr=0.0000001)
-
-np.random.seed(1234)
-num_classes = 2
 tf.keras.backend.set_image_data_format(
     'channels_last'
 )
@@ -173,15 +136,41 @@ import tensorflow as tf
 #model = tf.keras.models.load_model('fights.keras')
 
 
-#model = tf.keras.models.load_model('fights.keras')
-interpreter = tf.lite.Interpreter(model_path='fights.tflite')
-interpreter.allocate_tensors()
-input_details = interpreter.get_input_details()
-output_details = interpreter.get_output_details()
+model = tf.keras.models.load_model('fights3.keras')
+#interpreter = tf.lite.Interpreter(model_path='fights.tflite')
+#interpreter.allocate_tensors()
+#input_details = interpreter.get_input_details()
+#output_details = interpreter.get_output_details()
+model.summary()
+TEST_CASES = dataset_size
+for i in range(TEST_CASES):
+  inputs = [                np.expand_dims(fights_train[0][i], 0),
+                            np.expand_dims(fights_train[1][i], 0),
+                            np.expand_dims(fights_train[2][i], 0),
+                            np.expand_dims(fights_train[3][i], 0),
+                            np.expand_dims(fights_train[4][i], 0),
+                            np.expand_dims(fights_train[5][i], 0),
+                            np.expand_dims(fights_train[6][i], 0),
+                            np.expand_dims(fights_train[7][i], 0),
+            ]
+  for v in range(8):
+      inputs[v] = inputs[v].transpose(0, 3, 1, 2)
+      print(inputs[v].shape)
+
+  expected = model.predict([       inputs[0],
+                                   inputs[1],
+                                   inputs[2],
+                                   inputs[3],
+                                   inputs[4],
+                                   inputs[5],
+                                   inputs[6],
+                                   inputs[7],
+                                        ])
+  print(expected)
+
 print('importing rknn')
 from rknn.api import RKNN
 print('rknn imported')
-TEST_CASES = dataset_size
 rknn = RKNN(verbose=True)
 #rknn.load_rknn('fights.rknn')
 mean = [0.485, 0.456, 0.406]
@@ -189,7 +178,9 @@ std = [0.229, 0.224, 0.225]
 rknn.config(
         mean_values=mean,
         std_values=std,
-        target_platform='rv1106',
+        quant_img_RGB2BGR = True,
+      #  quantized_dtype='w8a16',
+        target_platform='rv1106b',
        # dynamic_input=[[[1, 3, img_height, img_width],
                        #[1, img_height, img_width, 3],
                        #[1, img_height, img_width, 3],
@@ -200,8 +191,9 @@ rknn.config(
                        #[1, img_height, img_width, 3]
         #                ]]
     )
+
 #ret = rknn.load_tflite(model='fights.tflite', input_is_nchw=False)
-input = [1, 3, 300, 300]
+input = [1, 3, 420, 300]
 #inputs = np.repeat( [input], 6, axis=0)
 print('loading model for conversion')
 ret = rknn.load_onnx(model='fights.onnx', input_size_list=[
@@ -233,22 +225,23 @@ if ret != 0:
     exit(ret)
 BigError = 0
 SmallError = 0
+#input_details = model.get_input_details()
+#output_details = model.get_output_details()
 for i in range(TEST_CASES):
-  inputs = [np.expand_dims(_fights_train[0][i], 0),
-            #               np.expand_dims(_fights_train[1][i], 0),
-            #               np.expand_dims(_fights_train[2][i], 0),
-            #               np.expand_dims(_fights_train[3][i], 0),
-            #                np.expand_dims(_fights_train[4][i], 0),
-            #    np.expand_dims(_fights_train[5][i], 0),
-                        #    np.expand_dims(_fights_train[6][i], 0),
-                        #    np.expand_dims(_fights_train[7][i], 0),
+  inputs = [                np.expand_dims(fights_train[0][i], 0),
+                            np.expand_dims(fights_train[1][i], 0),
+                            np.expand_dims(fights_train[2][i], 0),
+                            np.expand_dims(fights_train[3][i], 0),
+                            np.expand_dims(fights_train[4][i], 0),
+                            np.expand_dims(fights_train[5][i], 0),
+                            np.expand_dims(fights_train[6][i], 0),
+                            np.expand_dims(fights_train[7][i], 0),
             ]
-  #for v in range(8):
-   #   inputs[v] = inputs[v].transpose(0, 3, 1, 2)
-      #print(inputs[v].shape)
+  for v in range(8):
+      inputs[v] = inputs[v].transpose(0, 3, 1, 2)
+      print(inputs[v].shape)
   #print('input_details')
   #print(input_details[0])
-  from torchvision import datasets, transforms
 
   outputs = rknn.inference(inputs=[inputs[0],
                                    inputs[1],
@@ -256,15 +249,16 @@ for i in range(TEST_CASES):
                                    inputs[3],
                                    inputs[4],
                                    inputs[5],
-                         #          inputs[6],
-                        #           inputs[7],
+                                   inputs[6],
+                                   inputs[7],
                                         ])
- # expected = model.predict(inputs)
-  for j in range(6):
-    interpreter.set_tensor(input_details[j]['index'], np.expand_dims(_fights_train[j][i], 0))
-  interpreter.invoke()
-  result = interpreter.get_tensor(output_details[0]["index"])
+  expected = model.predict(inputs)
+#  for j in range(6):
+#    model.set_tensor(input_details[j]['index'], np.expand_dims(fights_train[j][i], 0))
+#  model.invoke()
+#  result = model.get_tensor(output_details[0]["index"])
  # print(expected)
+  result = model.predict()
   print('TF [' + str(outputs[0][0][0]) + ',' + str(outputs[0][0][1]) + ']')
   print(result)
   expected = outputs[0][0][0] - outputs[0][0][1]
@@ -286,104 +280,105 @@ for i in range(TEST_CASES):
   # Please note: TfLite fused Lstm kernel is stateful, so we need to reset
   # the states.
   # Clean up internal states.
-  interpreter.reset_all_variables()
+  model.reset_all_variables()
 
 print('Nbr Big Errors = '+str(BigError)+
       ' Small Error = ' + str(SmallError), color=print.BLUE)
 print("", default_color=print.DEFAULT)
 
 model = tf.keras.models.load_model('fights.keras')
-import tf2onnx
-import onnx
+if False :
+    import tf2onnx
+    import onnx
 
-v_input_shape = (0,) + full_input_shape
-input_signature = [tf.TensorSpec(v_input_shape, tf.float32, name='x')]
-# Use from_function for tf functions
-model.output_names=['output']
-onnx_model, _ = tf2onnx.convert.from_keras(model, input_signature, opset=18)
-#onnx.save(onnx_model, "fights.onnx")
-print('fights.onnx saved')
-exit(0)
-means = [0,0,0]
-#means = np.repeat(means[np.newaxis,...], 180, axis=0)
-#means = np.repeat(means[np.newaxis,...], 150, axis=0)
+    v_input_shape = (0,) + full_input_shape
+    input_signature = [tf.TensorSpec(v_input_shape, tf.float32, name='x')]
+    # Use from_function for tf functions
+    model.output_names=['output']
+    onnx_model, _ = tf2onnx.convert.from_keras(model, input_signature, opset=18)
+    #onnx.save(onnx_model, "fights.onnx")
+    print('fights.onnx saved')
+    exit(0)
+    means = [0,0,0]
+    #means = np.repeat(means[np.newaxis,...], 180, axis=0)
+    #means = np.repeat(means[np.newaxis,...], 150, axis=0)
 
-#rknn.config( target_platform='rv1106', mean_values=[means], std_values=[means], data_format='')
-#ret = rknn.load_onnx(model='fights.onnx', inputs=['x'], input_size_list=[[10, 150, 180, 3]])
+    #rknn.config( target_platform='rv1106', mean_values=[means], std_values=[means], data_format='')
+    #ret = rknn.load_onnx(model='fights.onnx', inputs=['x'], input_size_list=[[10, 150, 180, 3]])
 
 
-acc = history.acc
-val_acc = history.val_acc
-loss = history.loss
-val_loss = history.val_loss
-epochs = range(len(acc))
+    acc = history.acc
+    val_acc = history.val_acc
+    loss = history.loss
+    val_loss = history.val_loss
+    epochs = range(len(acc))
 
-plt.plot(epochs, acc, 'b', label='Training acc')
-plt.plot(epochs, val_acc, 'r', label='Validation acc')
-plt.title('Training and validation accuracy')
-plt.legend()
+    plt.plot(epochs, acc, 'b', label='Training acc')
+    plt.plot(epochs, val_acc, 'r', label='Validation acc')
+    plt.title('Training and validation accuracy')
+    plt.legend()
 
-plt.figure()
+    plt.figure()
 
-plt.plot(epochs, loss, 'b', label='Training loss')
-plt.plot(epochs, val_loss, 'r', label='Validation loss')
-plt.title('Training and validation loss')
-plt.legend()
+    plt.plot(epochs, loss, 'b', label='Training loss')
+    plt.plot(epochs, val_loss, 'r', label='Validation loss')
+    plt.title('Training and validation loss')
+    plt.legend()
 
-plt.show()
+    plt.show()
 
-score = model.evaluate(fights_test, y_test, batch_size=3)
-score
+    score = model.evaluate(fights_test, y_test, batch_size=3)
+    score
 
-from sklearn.metrics import classification_report, confusion_matrix
+    from sklearn.metrics import classification_report, confusion_matrix
 
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    import seaborn as sns
 
-def print_confusion_matrix(confusion_matrix, class_names, figsize = (10,7), fontsize=14):
-    df_cm = pd.DataFrame(
-        confusion_matrix, index=class_names, columns=class_names,
-    )
-    fig = plt.figure(figsize=figsize)
-    try:
-        heatmap = sns.heatmap(df_cm, annot=True, fmt="d")
-    except ValueError:
-        raise ValueError("Confusion matrix values must be integers.")
-    heatmap.yaxis.set_ticklabels(heatmap.yaxis.get_ticklabels(), rotation=0, ha='right', fontsize=fontsize)
-    heatmap.xaxis.set_ticklabels(heatmap.xaxis.get_ticklabels(), rotation=45, ha='right', fontsize=fontsize)
-    plt.ylabel('True label')
-    plt.xlabel('Predicted label')
-    return fig
+    def print_confusion_matrix(confusion_matrix, class_names, figsize = (10,7), fontsize=14):
+        df_cm = pd.DataFrame(
+            confusion_matrix, index=class_names, columns=class_names,
+        )
+        fig = plt.figure(figsize=figsize)
+        try:
+            heatmap = sns.heatmap(df_cm, annot=True, fmt="d")
+        except ValueError:
+            raise ValueError("Confusion matrix values must be integers.")
+        heatmap.yaxis.set_ticklabels(heatmap.yaxis.get_ticklabels(), rotation=0, ha='right', fontsize=fontsize)
+        heatmap.xaxis.set_ticklabels(heatmap.xaxis.get_ticklabels(), rotation=45, ha='right', fontsize=fontsize)
+        plt.ylabel('True label')
+        plt.xlabel('Predicted label')
+        return fig
 
-Y_pred = model.predict(fights_test , batch_size=1)
+    Y_pred = model.predict(fights_test , batch_size=1)
 
-yprd = Y_pred > 0.5
-yprd
+    yprd = Y_pred > 0.5
+    yprd
 
-ypredicted = []
-for zero,one in yprd:
-    if zero == True:
-        ypredicted.append(0)
-    else:
-        ypredicted.append(1)
+    ypredicted = []
+    for zero,one in yprd:
+        if zero == True:
+            ypredicted.append(0)
+        else:
+            ypredicted.append(1)
 
-ypredicted
+    ypredicted
 
-y_test
+    y_test
 
-y = []
+    y = []
 
-for zero,one in y_test:
-    if zero == True:
-        y.append(0)
-    else:
-        y.append(1)
+    for zero,one in y_test:
+        if zero == True:
+            y.append(0)
+        else:
+            y.append(1)
 
-confusion = confusion_matrix(y,ypredicted)
-confusion.shape
+    confusion = confusion_matrix(y,ypredicted)
+    confusion.shape
 
-print_confusion_matrix(confusion, [0,1], figsize = (30,15), fontsize=16)
+    print_confusion_matrix(confusion, [0,1], figsize = (30,15), fontsize=16)
 
-print('Classification Report')
-print(classification_report(y, ypredicted, target_names=['no-violance','violance']))
+    print('Classification Report')
+    print(classification_report(y, ypredicted, target_names=['no-violance','violance']))
